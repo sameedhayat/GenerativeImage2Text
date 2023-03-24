@@ -34,6 +34,25 @@ from .data_layer.transform import get_inception_train_transform
 from .data_layer.builder import collate_fn
 from .model import get_git_model
 
+import os
+
+def get_image_paths(directory):
+    """
+    Returns a list of all JPG and PNG files in the given directory and its subdirectories.
+    
+    :param directory: The directory to search for JPG and PNG files.
+    :return: A list of all JPG and PNG files in the directory.
+    """
+    image_extensions = ('.jpg', '.jpeg', '.png')
+    image_paths = []
+    
+    for root, _, files in os.walk(directory):
+        for file in files:
+            if file.lower().endswith(image_extensions):
+                image_paths.append(os.path.join(root, file))
+    
+    return image_paths
+
 
 def get_data(image_file, prefix, target, tokenizer, image_transform):
     max_text_len = 40
@@ -242,6 +261,156 @@ def forward_backward_example(image_files, captions, prefixs=None):
     loss = sum(loss_dict.values())
     loss.backward()
     logging.info(loss)
+
+
+import os
+import csv
+import json
+
+def get_file_contents(directory, file_extension):
+    """
+    Returns a list of the contents of all files with the given extension in the given directory
+    and its subdirectories. Currently supports CSV and JSON files only.
+    
+    :param directory: The directory to search for files.
+    :param file_extension: The file extension to search for (e.g. 'csv' or 'json').
+    :return: A list of the contents of all files with the given extension in the directory.
+    """
+    file_contents = []
+    
+    for root, _, files in os.walk(directory):
+        for file in files:
+            if file.lower().endswith(file_extension):
+                file_path = os.path.join(root, file)
+                with open(file_path, 'r') as f:
+                    if file_extension == 'csv':
+                        reader = csv.reader(f)
+                        for row in reader:
+                            file_contents.append(row)
+                    elif file_extension == 'json':
+                        data = json.load(f)
+                        file_contents.append(data)
+    
+    return file_contents
+
+
+def forward_backward_emb(image_dir, caption_dir, prefixs=None):
+
+    image_files = get_image_paths(image_dir)
+    captions = get_file_contents(caption_dir, 'csv')
+    
+
+    if prefixs is None:
+        prefixs = [''] * len(captions)
+    cfg = {
+        'crop_region_extend_in_datatransform': 4,
+        'data_normalize': 'clip',
+        'train_crop_size': 224,
+        'input_small_scale': 0.8,
+        'no_color_jitter': True,
+        'no_flip': True,
+        'no_aspect_dist': True,
+        'interpolation': 'bicubic',
+        'min_size_range32': [160, 224], # in pretraining, it is multi-scale from 160 to 224; while for fine-tuning, it is single scale
+        'patch_size': 16,
+        'train_transform': 'vitp',
+    }
+    cfg = Config(cfg, {})
+    all_data = []
+    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
+    image_transform = get_image_transform(cfg)
+    for image_file, prefix, target in zip(image_files, prefixs, captions):
+        data = get_data(image_file, prefix, target,
+                        tokenizer, image_transform)
+        all_data.append(data)
+    data = collate_fn(all_data)
+    logging.info(image_transform)
+    data = recursive_to_device(data, 'cuda')
+
+    param = {}
+    model = get_git_model(tokenizer, param)
+    model.train()
+    model.cuda()
+    loss_dict = model(data)
+    loss = sum(loss_dict.values())
+    loss.backward()
+    logging.info(loss)
+
+import torch
+import deepspeed
+from transformers import BertTokenizer
+from deepspeed.ops.adam import FusedAdam
+
+def train_deepspeed(image_dir, caption_dir, prefixs=None, batch_size=16, num_epochs=10, model_save_path='model.pt'):
+    
+
+    image_files = get_image_paths(image_dir)
+    captions = get_file_contents(caption_dir, 'csv')
+
+    if prefixs is None:
+        prefixs = [''] * len(captions)
+    cfg = {
+        'crop_region_extend_in_datatransform': 4,
+        'data_normalize': 'clip',
+        'train_crop_size': 224,
+        'input_small_scale': 0.8,
+        'no_color_jitter': True,
+        'no_flip': True,
+        'no_aspect_dist': True,
+        'interpolation': 'bicubic',
+        'min_size_range32': [160, 224],
+        'patch_size': 16,
+        'train_transform': 'vitp',
+    }
+    cfg = Config(cfg, {})
+    all_data = []
+    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
+    image_transform = get_image_transform(cfg)
+    for image_file, prefix, target in zip(image_files, prefixs, captions):
+        data = get_data(image_file, prefix, target,
+                        tokenizer, image_transform)
+        all_data.append(data)
+    data = collate_fn(all_data)
+    logging.info(image_transform)
+    data = recursive_to_device(data, 'cuda')
+
+    param = {}
+    model = get_git_model(tokenizer, param)
+    model.train()
+    model.cuda()
+
+    # Wrap the model with DeepSpeed
+    model_engine, _, _ = deepspeed.initialize(model=model, model_parameters=param, training_data=data)
+
+    optimizer = FusedAdam(model.parameters(), lr=1e-4)
+
+    best_loss = float('inf')
+
+    for epoch in range(num_epochs):
+        model_engine.train()
+        total_loss = 0.0
+        num_batches = 0
+        for batch in model_engine.backward_dataloader(data, batch_size=batch_size):
+            model_engine.zero_grad()
+            loss_dict = model_engine(batch)
+            loss = sum(loss_dict.values())
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
+            num_batches += 1
+
+        avg_loss = total_loss / num_batches
+        logging.info(f'Epoch {epoch + 1}/{num_epochs} - Avg Loss: {avg_loss:.4f}')
+
+        if (epoch + 1) % 5 == 0:
+            torch.save(model.state_dict(), f'{model_save_path}_{epoch + 1}.pt')
+
+        if avg_loss < best_loss:
+            best_loss = avg_loss
+            torch.save(model.state_dict(), f'best_{model_save_path}')
+
+    logging.info('Training complete.')
+
 
 def speed_test_forward_backward():
     duplicate = 32
