@@ -36,23 +36,14 @@ from .model import get_git_model
 
 import os
 
-def get_image_paths(directory):
-    """
-    Returns a list of all JPG and PNG files in the given directory and its subdirectories.
-    
-    :param directory: The directory to search for JPG and PNG files.
-    :return: A list of all JPG and PNG files in the directory.
-    """
-    image_extensions = ('.jpg', '.jpeg', '.png')
-    image_paths = []
-    
+def get_files_path(directory, extension):
+    file_paths = []
     for root, _, files in os.walk(directory):
         for file in files:
-            if file.lower().endswith(image_extensions):
-                image_paths.append(os.path.join(root, file))
-    
-    return image_paths
-
+            if file.endswith(extension):
+                file_path = os.path.join(root, file)
+                file_paths.append(file_path)
+    return file_paths
 
 def get_data(image_file, prefix, target, tokenizer, image_transform):
     max_text_len = 40
@@ -294,48 +285,6 @@ def get_file_contents(directory, file_extension):
     return file_contents
 
 
-def forward_backward_emb(image_dir, caption_dir, prefixs=None):
-
-    image_files = get_image_paths(image_dir)
-    captions = get_file_contents(caption_dir, 'csv')
-    
-
-    if prefixs is None:
-        prefixs = [''] * len(captions)
-    cfg = {
-        'crop_region_extend_in_datatransform': 4,
-        'data_normalize': 'clip',
-        'train_crop_size': 224,
-        'input_small_scale': 0.8,
-        'no_color_jitter': True,
-        'no_flip': True,
-        'no_aspect_dist': True,
-        'interpolation': 'bicubic',
-        'min_size_range32': [160, 224], # in pretraining, it is multi-scale from 160 to 224; while for fine-tuning, it is single scale
-        'patch_size': 16,
-        'train_transform': 'vitp',
-    }
-    cfg = Config(cfg, {})
-    all_data = []
-    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
-    image_transform = get_image_transform(cfg)
-    for image_file, prefix, target in zip(image_files, prefixs, captions):
-        data = get_data(image_file, prefix, target,
-                        tokenizer, image_transform)
-        all_data.append(data)
-    data = collate_fn(all_data)
-    logging.info(image_transform)
-    data = recursive_to_device(data, 'cuda')
-
-    param = {}
-    model = get_git_model(tokenizer, param)
-    model.train()
-    model.cuda()
-    loss_dict = model(data)
-    loss = sum(loss_dict.values())
-    loss.backward()
-    logging.info(loss)
-
 import torch
 import deepspeed
 from transformers import BertTokenizer
@@ -344,11 +293,11 @@ from deepspeed.ops.adam import FusedAdam
 def train_deepspeed(image_dir, caption_dir, prefixs=None, batch_size=16, num_epochs=10, model_save_path='model.pt'):
     
 
-    image_files = get_image_paths(image_dir)
-    captions = get_file_contents(caption_dir, 'csv')
+    image_files = get_files_path(image_dir, 'png')
+    caption_files = get_files_path(caption_dir, 'csv')
 
     if prefixs is None:
-        prefixs = [''] * len(captions)
+        prefixs = [''] * len(caption_files)
     cfg = {
         'crop_region_extend_in_datatransform': 4,
         'data_normalize': 'clip',
@@ -366,7 +315,8 @@ def train_deepspeed(image_dir, caption_dir, prefixs=None, batch_size=16, num_epo
     all_data = []
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
     image_transform = get_image_transform(cfg)
-    for image_file, prefix, target in zip(image_files, prefixs, captions):
+    for image_file, prefix, target in zip(image_files, prefixs, caption_files):
+        target = get_file_contents(caption_files)
         data = get_data(image_file, prefix, target,
                         tokenizer, image_transform)
         all_data.append(data)
@@ -391,6 +341,76 @@ def train_deepspeed(image_dir, caption_dir, prefixs=None, batch_size=16, num_epo
         total_loss = 0.0
         num_batches = 0
         for batch in model_engine.backward_dataloader(data, batch_size=batch_size):
+            model_engine.zero_grad()
+            loss_dict = model_engine(batch)
+            loss = sum(loss_dict.values())
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
+            num_batches += 1
+
+        avg_loss = total_loss / num_batches
+        logging.info(f'Epoch {epoch + 1}/{num_epochs} - Avg Loss: {avg_loss:.4f}')
+
+        if (epoch + 1) % 5 == 0:
+            torch.save(model.state_dict(), f'{model_save_path}_{epoch + 1}.pt')
+
+        if avg_loss < best_loss:
+            best_loss = avg_loss
+            torch.save(model.state_dict(), f'best_{model_save_path}')
+
+    logging.info('Training complete.')
+
+def train_deepspeed_lazy(image_dir, caption_dir, prefixs=None, batch_size=16, num_epochs=10, model_save_path='model.pt'):
+
+    image_files = get_files_path(image_dir, 'png')
+    caption_files = get_files_path(caption_dir, 'csv')
+
+    if prefixs is None:
+        prefixs = [''] * len(caption_files)
+    cfg = {
+        'crop_region_extend_in_datatransform': 4,
+        'data_normalize': 'clip',
+        'train_crop_size': 224,
+        'input_small_scale': 0.8,
+        'no_color_jitter': True,
+        'no_flip': True,
+        'no_aspect_dist': True,
+        'interpolation': 'bicubic',
+        'min_size_range32': [160, 224],
+        'patch_size': 16,
+        'train_transform': 'vitp',
+    }
+    cfg = Config(cfg, {})
+    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
+    image_transform = get_image_transform(cfg)
+
+    def data_generator():
+        for image_file, prefix, target in zip(image_files, prefixs, caption_files):
+            target = get_file_contents(caption_files)
+            data = get_data(image_file, prefix, target, tokenizer, image_transform)
+            yield data
+
+    # Wrap the data generator with DataLoader
+    data_loader = torch.utils.data.DataLoader(data_generator(), batch_size=batch_size)
+
+    param = {}
+    model = get_git_model(tokenizer, param)
+    model.train()
+    model.cuda()
+
+    # Wrap the model with DeepSpeed
+    model_engine, _, _ = deepspeed.initialize(model=model, model_parameters=param, training_data=data_loader)
+
+    optimizer = FusedAdam(model.parameters(), lr=1e-4)
+
+    best_loss = float('inf')
+
+    for epoch in range(num_epochs):
+        model_engine.train()
+        total_loss = 0.0
+        num_batches = 0
+        for batch in model_engine.backward_dataloader(data_loader):
             model_engine.zero_grad()
             loss_dict = model_engine(batch)
             loss = sum(loss_dict.values())
