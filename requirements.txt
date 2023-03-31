@@ -7,3 +7,5 @@ azfuse @ git+https://github.com/microsoft/azfuse.git
 torchvision
 transformers
 boto3
+deepspeed
+mpi4py
