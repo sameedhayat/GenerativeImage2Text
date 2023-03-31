@@ -31,7 +31,7 @@ from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
-from .file_utils import cached_path
+from file_utils import cached_path
 
 logger = logging.getLogger()
 

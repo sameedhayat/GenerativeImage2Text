@@ -1,14 +1,14 @@
 import base64
 import os.path as op
 from pprint import pformat
-from .common import parse_general_args, json_dump
-from .common import qd_tqdm as tqdm
+from common import parse_general_args, json_dump
+from common import qd_tqdm as tqdm
 import logging
-from .common import load_list_file, read_to_buffer
+from common import load_list_file, read_to_buffer
 import json
-from .common import init_logging, hash_sha1, write_to_file
-from .taxonomy import noffset_to_synset, get_nick_name
-from .tsv_io import tsv_writer
+from common import init_logging, hash_sha1, write_to_file
+from taxonomy import noffset_to_synset, get_nick_name
+from tsv_io import tsv_writer
 
 
 def get_imagenet_unique_nick_names():

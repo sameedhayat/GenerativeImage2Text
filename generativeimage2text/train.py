@@ -1,12 +1,12 @@
-from .common import Config
+from common import Config
 import json
 import os.path as op
-from .common import qd_tqdm as tqdm
-from .common import json_dump
-from .common import pilimg_from_base64
-from .torch_common import recursive_to_device
-from .tsv_io import TSVFile, tsv_writer, tsv_reader
-from .common import write_to_file
+from common import qd_tqdm as tqdm
+from common import json_dump
+from common import pilimg_from_base64
+from torch_common import recursive_to_device
+from tsv_io import TSVFile, tsv_writer, tsv_reader
+from common import write_to_file
 import torch
 import PIL
 from pprint import pformat
@@ -17,22 +17,22 @@ from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normal
 from PIL import Image
 from azfuse import File
 
-from .common import init_logging
-from .common import parse_general_args
-from .tsv_io import load_from_yaml_file
-from .torch_common import torch_load
-from .torch_common import load_state_dict
-from .torch_common import resize_2d_pos_embed
-from .layers.CLIP import clip
-from .layers.decoder import (TransformerDecoderTextualHead,
+from common import init_logging
+from common import parse_general_args
+from tsv_io import load_from_yaml_file
+from torch_common import torch_load
+from torch_common import load_state_dict
+from torch_common import resize_2d_pos_embed
+from layers.CLIP import clip
+from layers.decoder import (TransformerDecoderTextualHead,
                              AutoRegressiveBeamSearch, GeneratorWithBeamSearch)
-from .layers.decoder import CaptioningModel
-from .process_image import load_image_by_pil
-from .data_layer.transform import RenameKey, SelectTransform
-from .data_layer.transform import ImageTransform2Dict
-from .data_layer.transform import get_inception_train_transform
-from .data_layer.builder import collate_fn
-from .model import get_git_model
+from layers.decoder import CaptioningModel
+from process_image import load_image_by_pil
+from data_layer.transform import RenameKey, SelectTransform
+from data_layer.transform import ImageTransform2Dict
+from data_layer.transform import get_inception_train_transform
+from data_layer.builder import collate_fn
+from model import get_git_model
 
 import os
 

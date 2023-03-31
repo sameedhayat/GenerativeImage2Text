@@ -1,8 +1,8 @@
-from .torch_common import resize_2d_pos_embed
+from torch_common import resize_2d_pos_embed
 import torch
-from .layers.CLIP import clip
-from .layers.decoder import CaptioningModel
-from .layers.decoder import (TransformerDecoderTextualHead,
+from layers.CLIP import clip
+from layers.decoder import CaptioningModel
+from layers.decoder import (TransformerDecoderTextualHead,
                              AutoRegressiveBeamSearch, GeneratorWithBeamSearch)
 
 

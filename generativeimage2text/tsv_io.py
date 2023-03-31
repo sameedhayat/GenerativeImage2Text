@@ -1,9 +1,9 @@
 import numpy as np
 import shutil
-from .common import qd_tqdm as tqdm
+from common import qd_tqdm as tqdm
 import mmap
 import time
-from .common import dict_update_path_value, dict_get_path_value, get_all_path, load_from_yaml_str
+from common import dict_update_path_value, dict_get_path_value, get_all_path, load_from_yaml_str
 import logging
 from azfuse import File
 import os

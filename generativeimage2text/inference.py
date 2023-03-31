@@ -1,12 +1,12 @@
 import json
 import os.path as op
-from .common import qd_tqdm as tqdm
-from .common import json_dump
-from .common import pilimg_from_base64
-from .common import get_mpi_rank, get_mpi_size, get_mpi_local_rank
+from common import qd_tqdm as tqdm
+from common import json_dump
+from common import pilimg_from_base64
+from common import get_mpi_rank, get_mpi_size, get_mpi_local_rank
 
-from .tsv_io import TSVFile, tsv_writer, tsv_reader
-from .common import write_to_file
+from tsv_io import TSVFile, tsv_writer, tsv_reader
+from common import write_to_file
 import torch
 import PIL
 from pprint import pformat
@@ -16,13 +16,13 @@ from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normal
 from PIL import Image
 from azfuse import File
 
-from .common import init_logging
-from .common import parse_general_args
-from .tsv_io import load_from_yaml_file
-from .torch_common import torch_load
-from .torch_common import load_state_dict
-from .process_image import load_image_by_pil
-from .model import get_git_model
+from common import init_logging
+from common import parse_general_args
+from tsv_io import load_from_yaml_file
+from torch_common import torch_load
+from torch_common import load_state_dict
+from process_image import load_image_by_pil
+from model import get_git_model
 
 
 
