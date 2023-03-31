@@ -1,8 +1,8 @@
 from torchvision.transforms import transforms
 from PIL import Image
 import logging
-from ..common import dict_has_path, dict_get_path_value, dict_remove_path
-from ..common import dict_update_path_value
+from common import dict_has_path, dict_get_path_value, dict_remove_path
+from common import dict_update_path_value
 
 
 class RenameKey(object):

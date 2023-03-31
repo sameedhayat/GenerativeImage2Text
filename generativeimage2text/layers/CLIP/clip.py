@@ -9,7 +9,7 @@ from PIL import Image
 from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize
 from tqdm import tqdm
 
-from model import build_model
+from layers.CLIP.model import build_model
 
 __all__ = ["available_models", "load"]
 
