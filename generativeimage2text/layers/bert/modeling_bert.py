@@ -25,8 +25,8 @@ from io import open
 import torch
 from torch import nn
 
-from activations import ACT2FN
-from modeling_utils import (PretrainedConfig, prune_linear_layer)
+from layers.bert.activations import ACT2FN
+from layers.bert.modeling_utils import (PretrainedConfig, prune_linear_layer)
 
 logger = logging.getLogger()
 

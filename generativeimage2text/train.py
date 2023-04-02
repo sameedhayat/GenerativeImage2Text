@@ -361,7 +361,7 @@ def train_deepspeed(image_dir, caption_dir, prefixs=None, batch_size=16, num_epo
 
     logging.info('Training complete.')
 
-def train_deepspeed_lazy(image_dir, caption_dir, prefixs=None, batch_size=16, num_epochs=10, model_save_path='model.pt'):
+def train_deepspeed_lazy(image_dir, caption_dir, deepspeed_config, prefixs=None, batch_size=16, num_epochs=10, model_save_path='model.pt'):
 
     image_files = get_files_path(image_dir, 'png')
     caption_files = get_files_path(caption_dir, 'csv')
@@ -398,6 +398,7 @@ def train_deepspeed_lazy(image_dir, caption_dir, prefixs=None, batch_size=16, nu
     model = get_git_model(tokenizer, param)
     model.train()
     model.cuda()
+ 
 
     # Wrap the model with DeepSpeed
     model_engine, _, _ = deepspeed.initialize(model=model, model_parameters=param, training_data=data_loader)

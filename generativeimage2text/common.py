@@ -8,6 +8,7 @@ import argparse
 import sys
 import os.path as op
 import yaml
+import deepspeed
 import logging
 from pprint import pformat
 
@@ -344,6 +345,11 @@ def parse_general_args():
             type=str)
     parser.add_argument('-bp', '--base64_param', help='base64 encoded yaml format',
             type=str)
+    parser.add_argument('--local_rank', type=int, default=-1,
+                    help='local rank passed from distributed launcher')
+    # Include DeepSpeed configuration arguments
+    parser = deepspeed.add_config_arguments(parser)
+    
     args = parser.parse_args()
     kwargs =  {}
     if args.config_file:
