@@ -458,7 +458,6 @@ def train_deepspeed_lazy(image_dir, caption_dir, deepspeed_args, prefixs=None, b
         total_loss = 0.0
         num_batches = 0
         for step, batch in enumerate(data_loader):
-            batch = {k: v.to('cuda') for k, v in batch.items()}
             loss = model_engine(batch)
 
             #runs backpropagation
