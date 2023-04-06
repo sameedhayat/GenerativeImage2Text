@@ -439,7 +439,7 @@ def train_deepspeed_lazy(image_dir, caption_dir, deepspeed_args, prefixs=None, b
     # Wrap the data generator with DataLoader
     data_loader = torch.utils.data.DataLoader(data, batch_size=batch_size, collate_fn=collate_fn)
     # Move the DataLoader to CUDA
-    dataloader = dataloader.to('cuda')
+    data_loader = data_loader.to('cuda')
 
     param = {}
     model = get_git_model(tokenizer, param)
