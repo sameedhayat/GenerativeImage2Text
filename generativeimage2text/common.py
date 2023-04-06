@@ -351,6 +351,7 @@ def parse_general_args():
     parser = deepspeed.add_config_arguments(parser)
     
     args = parser.parse_args()
+    
     kwargs =  {}
     if args.config_file:
         logging.info('loading parameter from {}'.format(args.config_file))
@@ -380,6 +381,13 @@ def parse_general_args():
                 logging.info('overwriting {} to {} for {}'.format(kwargs[k],
                     configs[k], k))
                 kwargs[k] = configs[k]
+    
+    del args.param
+    del args.base64_param
+    del args.config_file
+    kwargs["deepspeed_args"] = args
+   
+    print(kwargs)
     return kwargs
 
 def qd_tqdm(*args, **kwargs):
