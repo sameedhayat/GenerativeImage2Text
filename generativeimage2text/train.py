@@ -406,7 +406,8 @@ class MyDataset(Dataset):
 
     def __len__(self):
         return len(self.image_files)
-    
+
+
 def train_deepspeed_lazy(image_dir, caption_dir, deepspeed_args, prefixs=None, batch_size=16, num_epochs=10, model_save_path='model.pt'):
     print(deepspeed_args)
     image_files = get_files_path(image_dir, 'png')
