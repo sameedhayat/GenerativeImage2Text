@@ -269,20 +269,11 @@ def get_file_contents(directory, file_extension):
     """
     file_contents = []
     
-    for root, _, files in os.walk(directory):
-        for file in files:
-            if file.lower().endswith(file_extension):
-                file_path = os.path.join(root, file)
-                with open(file_path, 'r') as f:
-                    if file_extension == 'csv':
-                        reader = csv.reader(f)
-                        for row in reader:
-                            file_contents.append(row)
-                    elif file_extension == 'json':
-                        data = json.load(f)
-                        file_contents.append(data)
-    
-    return file_contents
+    # Open the CSV file and read it as a string
+    with open(directory, 'r') as f:
+      csv_string = f.read()
+
+    return csv_string
 
 
 import torch
@@ -361,8 +352,63 @@ def train_deepspeed(image_dir, caption_dir, prefixs=None, batch_size=16, num_epo
 
     logging.info('Training complete.')
 
-def train_deepspeed_lazy(image_dir, caption_dir, deepspeed_config, prefixs=None, batch_size=16, num_epochs=10, model_save_path='model.pt'):
 
+import os
+import csv
+from PIL import Image
+import torch
+from torch.utils.data import Dataset, DataLoader
+
+class ImageDataset(Dataset):
+    def __init__(self, image_files, prefixes, csv_files):
+        self.image_files = image_files
+        self.prefixes = prefixes
+        self.csv_files = csv_files
+        
+    def __getitem__(self, index):
+        # Load image
+        image_file = self.image_files[index]
+
+        # Load corresponding CSV file
+        csv_file = os.path.splitext(image_file)[0] + '.csv'
+        csv_path = os.path.join(self.csv_dir, csv_file)
+        with open(csv_path, 'r') as f:
+            csv_reader = csv.reader(f)
+            # You can parse the CSV data and use it as needed
+            # Here, we just read the first row as a list
+            csv_data = next(csv_reader)
+
+        return image, csv_data
+
+    def __len__(self):
+        return len(self.image_files)
+
+from torch.utils.data import Dataset
+from torchvision.transforms import ToTensor
+
+class MyDataset(Dataset):
+    def __init__(self, image_files, prefixs, caption_files, tokenizer, image_transform):
+        self.image_files = image_files
+        self.prefixs = prefixs
+        self.caption_files = caption_files
+        self.tokenizer = tokenizer
+        self.image_transform = image_transform
+        
+
+    def __getitem__(self, index):
+        image_file = self.image_files[index]
+        prefix = self.prefixs[index]
+        target = self.caption_files[index]
+        
+        target = get_file_contents(target, "csv") # Implement your logic to read caption file
+        data = get_data(image_file, prefix, target, self.tokenizer, self.image_transform) # Implement your logic to get data
+        return data
+
+    def __len__(self):
+        return len(self.image_files)
+    
+def train_deepspeed_lazy(image_dir, caption_dir, deepspeed_args, prefixs=None, batch_size=16, num_epochs=10, model_save_path='model.pt'):
+    print(deepspeed_args)
     image_files = get_files_path(image_dir, 'png')
     caption_files = get_files_path(caption_dir, 'csv')
 
@@ -385,25 +431,24 @@ def train_deepspeed_lazy(image_dir, caption_dir, deepspeed_config, prefixs=None,
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
     image_transform = get_image_transform(cfg)
 
-    def data_generator():
-        for image_file, prefix, target in zip(image_files, prefixs, caption_files):
-            target = get_file_contents(caption_files)
-            data = get_data(image_file, prefix, target, tokenizer, image_transform)
-            yield data
+    data = MyDataset(image_files, prefixs, caption_files, tokenizer, image_transform)
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
     # Wrap the data generator with DataLoader
-    data_loader = torch.utils.data.DataLoader(data_generator(), batch_size=batch_size)
+    data_loader = torch.utils.data.DataLoader(data, batch_size=batch_size, collate_fn=collate_fn)
 
     param = {}
     model = get_git_model(tokenizer, param)
+    
     model.train()
     model.cuda()
- 
-
+    
+    
     # Wrap the model with DeepSpeed
-    model_engine, _, _ = deepspeed.initialize(model=model, model_parameters=param, training_data=data_loader)
+    model_engine, optimizer, _, _  = deepspeed.initialize(model=model, model_parameters=model.parameters(), training_data=data_loader, args=deepspeed_args)
 
-    optimizer = FusedAdam(model.parameters(), lr=1e-4)
+    #optimizer = FusedAdam(model.parameters(), lr=1e-4)
 
     best_loss = float('inf')
 
@@ -411,12 +456,20 @@ def train_deepspeed_lazy(image_dir, caption_dir, deepspeed_config, prefixs=None,
         model_engine.train()
         total_loss = 0.0
         num_batches = 0
-        for batch in model_engine.backward_dataloader(data_loader):
-            model_engine.zero_grad()
-            loss_dict = model_engine(batch)
-            loss = sum(loss_dict.values())
-            loss.backward()
-            optimizer.step()
+        for step, batch in enumerate(data_loader):
+            batch = {k: v.to('cuda') for k, v in batch.items()}
+            loss = model_engine(batch)
+
+            #runs backpropagation
+            model_engine.backward(loss)
+
+            #weight update
+            model_engine.step()
+            #model_engine.zero_grad()
+            #loss_dict = model_engine(batch)
+            loss = sum(loss.values())
+            #loss.backward()
+            #optimizer.step()
             total_loss += loss.item()
             num_batches += 1
 
@@ -499,5 +552,6 @@ if __name__ == '__main__':
     logging.info('param:\n{}'.format(pformat(kwargs)))
     function_name = kwargs['type']
     del kwargs['type']
+    print(kwargs)
     locals()[function_name](**kwargs)
 

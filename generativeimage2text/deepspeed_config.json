@@ -1,47 +1,14 @@
 {
     "train_batch_size": 16,
     "gradient_accumulation_steps": 1,
-    "zero_optimization": {
-      "stage": 0,
-      "cpu_offload": true,
-      "contiguous_gradients": true,
-      "overlap_comm": true,
-      "reduce_bucket_size": 2.0,
-      "allgather_partitions": true,
-      "allgather_bucket_size": 5e8,
-      "reduce_scatter": true,
-      "reduce_scatter_bucket_size": 5e8,
-      "overlap_reductions": true,
-      "prefetch_bucket_size": 5e8,
-      "stage3_prefetch_bucket_size": 5e8,
-      "stage3_param_persistence_threshold": 0,
-      "stage3_max_live_parameters": 1.0,
-      "cpu_checkpointing": false,
-      "cpu_checkpointing_config": {
-        "partition_activations": true,
-        "contiguous_memory_optimization": true,
-        "profile_fp16_activation_grads": false,
-        "profile_activation_sparsity": false,
-        "verbose": false
-      },
-      "partition_activations": false,
-      "cpu_checkpointing_offload": false,
-      "overlap_with_data_preparation": true,
-      "reduce_scatter_to_and_from_model": true,
-      "overlap_with_backward": true,
-      "pipeline": {
-        "partition_num_microbatches": 1,
-        "pipeline_num_stages": 1,
-        "num_pipeline_microbatches": 1
+    "optimizer": {
+      "type": "Adam",
+      "params": {
+        "lr": 0.00015
       }
     },
     "fp16": {
-      "enabled": true,
-      "loss_scale": 0,
-      "initial_scale_power": 16,
-      "loss_scale_window": 1000,
-      "hysteresis": 2,
-      "min_loss_scale": 1
-    }
+      "enabled": true
+    },
+    "zero_optimization": true
   }
-  
