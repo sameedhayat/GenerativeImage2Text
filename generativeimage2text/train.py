@@ -66,9 +66,9 @@ def get_data(image_file, prefix, target, tokenizer, image_transform):
     im = load_image_by_pil(image_file)
 
     data = {
-        'caption_tokens': torch.tensor(input_ids),
+        'caption_tokens': torch.tensor(input_ids).to("cuda"),
         #'caption_lengths': len(input_ids),
-        'need_predict': torch.tensor(need_predict),
+        'need_predict': torch.tensor(need_predict).to("cuda"),
         'image': im,
         # 'rect' field can be fed in 'caption', which tells the bounding box
         # region of the image that is described by the caption. In this case,
@@ -458,9 +458,10 @@ def train_deepspeed_lazy(image_dir, caption_dir, deepspeed_args, prefixs=None, b
         total_loss = 0.0
         num_batches = 0
         for step, batch in enumerate(data_loader):
-            batch = batch.to('cuda')
-            loss = model_engine(batch)
-
+            batch = recursive_to_device(batch, 'cuda')
+            # Move the batch data to GPU
+            loss_dict = model_engine(batch)
+            loss = sum(loss_dict.values())  
             #runs backpropagation
             model_engine.backward(loss)
 
@@ -468,9 +469,10 @@ def train_deepspeed_lazy(image_dir, caption_dir, deepspeed_args, prefixs=None, b
             model_engine.step()
             #model_engine.zero_grad()
             #loss_dict = model_engine(batch)
-            loss = sum(loss.values())
+            #loss = sum(loss.values())
             #loss.backward()
             #optimizer.step()
+            print(loss)
             total_loss += loss.item()
             num_batches += 1
 
