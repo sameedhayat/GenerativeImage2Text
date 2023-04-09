@@ -46,6 +46,53 @@ def get_files_path(directory, extension):
     return file_paths
 
 def get_data(image_file, prefix, target, tokenizer, image_transform):
+    max_text_len = 512
+    prefix_encoding = tokenizer(
+        prefix, padding='do_not_pad',
+        add_special_tokens=False,
+        truncation=True, max_length=max_text_len)
+    target_encoding = tokenizer(
+        target, padding='do_not_pad',
+        add_special_tokens=False,
+        truncation=True, max_length=max_text_len)
+    need_predict = [0] * len(prefix_encoding['input_ids']) + [1] * len(target_encoding['input_ids'])
+    payload = prefix_encoding['input_ids'] + target_encoding['input_ids']
+
+    # Check if total length of input ids exceeds the maximum length
+    if len(payload) > max_text_len:
+        # Calculate the total length of excess tokens
+        excess_len = len(payload) - max_text_len
+        # Calculate the number of tokens to be cropped from each side of the sequence
+        tokens_to_crop = excess_len // 2
+        # Update the payload and need_predict lists with cropped sequence
+        payload = payload[tokens_to_crop:-(tokens_to_crop)]
+        need_predict = need_predict[tokens_to_crop:-(tokens_to_crop)]
+
+    input_ids = [tokenizer.cls_token_id] + payload + [tokenizer.sep_token_id]
+    need_predict = [0] + need_predict + [1]
+
+    im = load_image_by_pil(image_file)
+
+    data = {
+        'caption_tokens': torch.tensor(input_ids).to("cuda"),
+        #'caption_lengths': len(input_ids),
+        'need_predict': torch.tensor(need_predict).to("cuda"),
+        'image': im,
+        # 'rect' field can be fed in 'caption', which tells the bounding box
+        # region of the image that is described by the caption. In this case,
+        # we can optionally crop the region.
+        'caption': {},
+        # this iteration can be used for crop-size selection so that all GPUs
+        # can process the image with the same input size
+        'iteration': 0,
+    }
+    data = image_transform(data)
+
+    return data
+
+
+"""
+def get_data(image_file, prefix, target, tokenizer, image_transform):
     max_text_len = 40
     prefix_encoding = tokenizer(
         prefix, padding='do_not_pad',
@@ -81,7 +128,7 @@ def get_data(image_file, prefix, target, tokenizer, image_transform):
     data = image_transform(data)
 
     return data
-
+"""
 def get_image_transform(cfg):
     return get_multi_scale_image_transform(cfg, is_train=True)
 
